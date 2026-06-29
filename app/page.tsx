@@ -6,7 +6,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const LOGO_URL = "https://postimg.cc/RJz9gfv4";
+const LOGO_URL = "https://i.postimg.cc/VvJ6LBTr/LOGO-TRIGALENZ-A-RUNNERS-1.png";
 const categoriasBase = [
   "Insumos Médicos", "Equipos de Protección (EPP)", 
   "Higiene Personal", "Alimentos y Nutrición", "Rescate y Contingencia"
