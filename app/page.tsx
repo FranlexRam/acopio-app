@@ -6,6 +6,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+const LOGO_URL = "https://i.postimg.cc/6ptN3QJ5/logo-sakti.png";
 const categoriasBase = [
   "Insumos Médicos", "Equipos de Protección (EPP)", 
   "Higiene Personal", "Alimentos y Nutrición", "Rescate y Contingencia"
@@ -42,8 +43,6 @@ export default function AcopioApp() {
     }
 
     const cantidadInput = parseInt(cantidad);
-    
-    // 1. Guardar/Sumar en Inventario
     const { data: existentes } = await supabase
       .from('entradas_acopio')
       .select('id, cantidad')
@@ -56,15 +55,12 @@ export default function AcopioApp() {
       toast.success(`Actualizado: ${nuevaCantidad} unidades`);
     } else {
       await supabase.from('entradas_acopio').insert([{ nombre: producto, categoria, cantidad: cantidadInput }]);
-      
-      // 2. Si es producto nuevo, guardarlo en el catálogo maestro si no existe
       if (!catalogoMaestro.find(p => p.nombre === producto)) {
         await supabase.from('catalogo_maestro').insert([{ nombre: producto, categoria }]);
         fetchCatalogo();
       }
       toast.success("Producto registrado");
     }
-    
     setProducto(""); setCantidad(""); setEsOtro(false); fetchInventario();
   };
 
@@ -84,71 +80,100 @@ export default function AcopioApp() {
     ));
   };
 
-  const descargarPDF = () => {
+  const descargarPDF = async () => {
     const doc = new jsPDF();
-    doc.text("Reporte de Inventario", 14, 20);
-    let startY = 30;
+    
+    // Convertir imagen a base64 para jsPDF
+    const toDataURL = (url: string) => fetch(url).then(response => response.blob()).then(blob => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    }));
+
+    try {
+        const imgData = await toDataURL(LOGO_URL);
+        doc.addImage(imgData, 'PNG', 14, 10, 20, 20);
+    } catch (e) { console.error("Error cargando logo en PDF"); }
+
+    doc.setFontSize(22);
+    doc.text("Insumos - Centro de Acopio", 40, 20);
+    doc.setFontSize(12);
+    doc.text("Reporte de Inventario", 40, 28);
+    
+    let startY = 40;
     const categorias = [...new Set(inventario.map(item => item.categoria))];
+    
     categorias.forEach(cat => {
+      doc.setFontSize(14);
       doc.text(cat, 14, startY);
       const filas = inventario.filter(i => i.categoria === cat).map(i => [i.nombre, i.cantidad]);
-      autoTable(doc, { startY: startY + 5, head: [['Producto', 'Cantidad']], body: filas });
+      autoTable(doc, { 
+        startY: startY + 5, 
+        head: [['Producto', 'Cantidad']], 
+        body: filas,
+        styles: { fontSize: 12, cellPadding: 5 } 
+      });
       startY = (doc as any).lastAutoTable.finalY + 15;
     });
-    doc.save("inventario.pdf");
+    doc.save("Reporte_Acopio.pdf");
   };
 
   return (
-    <div className="p-4 max-w-md mx-auto min-h-screen bg-black text-white">
+    <div className="min-h-screen w-full bg-black text-white p-4 md:p-8">
       <Toaster />
-      <h1 className="text-3xl font-bold text-center text-blue-400 mb-6">SAKTI INVENTORY</h1>
+      <header className="max-w-5xl mx-auto mb-10 text-center flex flex-col items-center gap-4">
+        <img src={LOGO_URL} alt="Logo Sakti" className="h-24 w-auto object-contain" />
+        <h1 className="text-4xl font-light tracking-tight text-blue-400">Insumos - Centro de Acopio</h1>
+      </header>
       
-      <div className="bg-gray-900 p-6 rounded-xl border border-gray-700 flex flex-col gap-4">
-        <label className="text-sm font-semibold text-gray-300">Categoría</label>
-        <select className="p-3 bg-gray-800 rounded-lg" onChange={(e) => {setCategoria(e.target.value); setProducto("");}}>
-          {categoriasBase.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-        </select>
+      <main className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="bg-gray-900 p-8 rounded-2xl border border-gray-800 flex flex-col gap-4">
+          <label className="text-sm font-semibold text-gray-400">Categoría</label>
+          <select className="p-4 bg-black rounded-xl border border-gray-700" onChange={(e) => {setCategoria(e.target.value); setProducto("");}}>
+            {categoriasBase.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+          </select>
 
-        <label className="text-sm font-semibold text-gray-300">Producto</label>
-        {!esOtro ? (
-          <>
-            <input list="productos-list" className="p-3 bg-gray-800 rounded-lg w-full" placeholder="Buscar..." value={producto} onChange={(e) => {
+          <label className="text-sm font-semibold text-gray-400">Producto</label>
+          {!esOtro ? (
+            <input list="productos-list" className="p-4 bg-black rounded-xl border border-gray-700 w-full" placeholder="Buscar..." value={producto} onChange={(e) => {
               if(e.target.value === "OTRO") setEsOtro(true);
               else setProducto(e.target.value);
             }} />
-            <datalist id="productos-list">
-              {catalogoMaestro.filter(p => p.categoria === categoria).map(p => <option key={p.nombre} value={p.nombre} />)}
-              <option value="OTRO" />
-            </datalist>
-          </>
-        ) : (
-          <div className="flex gap-2">
-            <input className="p-3 bg-gray-800 rounded-lg flex-1" placeholder="Nuevo nombre" onChange={(e) => setProducto(e.target.value)} />
-            <button className="bg-gray-700 p-2 rounded" onClick={() => {setEsOtro(false); setProducto("");}}>X</button>
-          </div>
-        )}
-
-        <label className="text-sm font-semibold text-gray-300">Cantidad</label>
-        <input type="number" className="p-3 bg-gray-800 rounded-lg" value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
-        <button className="bg-blue-600 p-4 rounded-lg font-bold" onClick={guardarInsumo}>Registrar / Sumar</button>
-      </div>
-
-      <input className="p-3 bg-gray-800 rounded-lg w-full mt-6" placeholder="🔍 Buscar..." onChange={(e) => setBusqueda(e.target.value)} />
-      
-      <div className="flex flex-col gap-2 mt-4">
-        {inventario.filter(i => i.nombre.toLowerCase().includes(busqueda.toLowerCase())).map(item => (
-          <div key={item.id} className="flex justify-between items-center bg-gray-800 p-4 rounded-lg">
-            <div>
-              <p className="font-bold">{item.nombre}</p>
-              <p className="text-xs text-blue-400">{item.categoria}</p>
+          ) : (
+            <div className="flex gap-2">
+              <input className="p-4 bg-black rounded-xl border border-gray-700 flex-1" placeholder="Nuevo nombre" onChange={(e) => setProducto(e.target.value)} />
+              <button className="bg-gray-700 px-4 rounded-xl" onClick={() => {setEsOtro(false); setProducto("");}}>X</button>
             </div>
-            <span className="text-2xl font-bold">{item.cantidad}</span>
-            <button className="text-red-500 text-xs" onClick={() => borrarInsumo(item.id, item.nombre)}>Borrar</button>
-          </div>
-        ))}
-      </div>
+          )}
+          <datalist id="productos-list">
+            {catalogoMaestro.filter(p => p.categoria === categoria).map(p => <option key={p.nombre} value={p.nombre} />)}
+            <option value="OTRO" />
+          </datalist>
 
-      <button className="bg-red-700 p-4 rounded-lg font-bold w-full mt-6" onClick={descargarPDF}>Descargar PDF</button>
+          <label className="text-sm font-semibold text-gray-400">Cantidad</label>
+          <input type="number" className="p-4 bg-black rounded-xl border border-gray-700" value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
+          
+          <button className="bg-blue-600 hover:bg-blue-700 p-4 rounded-xl font-bold transition-all" onClick={guardarInsumo}>Registrar / Sumar</button>
+          <button className="bg-gray-700 hover:bg-gray-600 p-4 rounded-xl font-bold transition-all" onClick={descargarPDF}>Descargar Reporte PDF</button>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <input className="p-4 bg-gray-900 rounded-xl border border-gray-700 w-full" placeholder="🔍 Buscar en inventario..." onChange={(e) => setBusqueda(e.target.value)} />
+          {inventario.filter(i => i.nombre.toLowerCase().includes(busqueda.toLowerCase())).map(item => (
+            <div key={item.id} className="flex justify-between items-center bg-gray-900 p-5 rounded-xl border border-gray-800">
+              <div>
+                <p className="font-bold text-lg">{item.nombre}</p>
+                <p className="text-xs text-blue-400 uppercase tracking-widest">{item.categoria}</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-3xl font-light">{item.cantidad}</span>
+                <button className="text-red-500 hover:text-red-400 text-sm" onClick={() => borrarInsumo(item.id, item.nombre)}>Borrar</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </main>
     </div>
   );
 }
