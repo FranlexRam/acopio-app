@@ -23,6 +23,10 @@ export default function AcopioApp() {
   // Estados para filtros
   const [busqueda, setBusqueda] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState("Todos");
+  
+  // Estados para edición
+  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [nuevaCant, setNuevaCant] = useState("");
 
   useEffect(() => { 
     fetchInventario(); 
@@ -65,6 +69,13 @@ export default function AcopioApp() {
       toast.success("Producto registrado");
     }
     setProducto(""); setCantidad(""); setEsOtro(false); fetchInventario();
+  };
+
+  const actualizarCantidad = async (id: number) => {
+    await supabase.from('entradas_acopio').update({ cantidad: parseInt(nuevaCant) }).eq('id', id);
+    setEditandoId(null);
+    fetchInventario();
+    toast.success("Cantidad actualizada");
   };
 
   const borrarInsumo = (id: number, nombre: string) => {
@@ -120,7 +131,6 @@ export default function AcopioApp() {
     doc.save("Reporte_Acopio.pdf");
   };
 
-  // Lógica de filtrado dinámico
   const inventarioFiltrado = inventario.filter(i => {
     const coincideBusqueda = i.nombre.toLowerCase().includes(busqueda.toLowerCase());
     const coincideCategoria = filtroCategoria === "Todos" || i.categoria === filtroCategoria;
@@ -136,7 +146,6 @@ export default function AcopioApp() {
       </header>
       
       <main className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Panel de Registro */}
         <div className="bg-gray-900 p-8 rounded-2xl border border-gray-800 flex flex-col gap-4">
           <label className="text-sm font-semibold text-gray-400">Categoría</label>
           <select className="p-4 bg-black rounded-xl border border-gray-700" onChange={(e) => {setCategoria(e.target.value); setProducto("");}}>
@@ -164,12 +173,9 @@ export default function AcopioApp() {
           <input type="number" className="p-4 bg-black rounded-xl border border-gray-700" value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
           
           <button className="bg-blue-600 hover:bg-blue-700 p-4 rounded-xl font-bold transition-all" onClick={guardarInsumo}>Registrar / Sumar</button>
-          
-          {/* Botón Rojo Premium */}
-          <button className="bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 hover:to-red-800 p-4 rounded-xl font-bold transition-all shadow-lg border border-red-500" onClick={descargarPDF}>Descargar Reporte PDF</button>
+          <button className="bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 hover:to-red-800 p-4 rounded-xl font-bold transition-all shadow-lg border border-red-500" onClick={descargarPDF}>Descargar Inventario PDF</button>
         </div>
 
-        {/* Panel de Inventario con Filtros */}
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input className="p-4 bg-gray-900 rounded-xl border border-gray-700 w-full" placeholder="🔍 Buscar nombre..." onChange={(e) => setBusqueda(e.target.value)} />
@@ -186,7 +192,16 @@ export default function AcopioApp() {
                 <p className="text-xs text-blue-400 uppercase tracking-widest">{item.categoria}</p>
               </div>
               <div className="flex items-center gap-4">
-                <span className="text-3xl font-light">{item.cantidad}</span>
+                {editandoId === item.id ? (
+                  <div className="flex items-center gap-2">
+                    <input type="number" className="w-20 bg-black p-2 rounded border border-gray-600 text-center" defaultValue={item.cantidad} onChange={(e) => setNuevaCant(e.target.value)} />
+                    <button className="bg-green-600 px-3 py-2 rounded-xl" onClick={() => actualizarCantidad(item.id)}>✔</button>
+                  </div>
+                ) : (
+                  <span className="text-3xl font-light cursor-pointer hover:text-blue-400 transition-colors" onClick={() => {setEditandoId(item.id); setNuevaCant(item.cantidad)}} title="Clic para editar">
+                    {item.cantidad}
+                  </span>
+                )}
                 <button className="text-red-500 hover:text-red-400 text-sm" onClick={() => borrarInsumo(item.id, item.nombre)}>Borrar</button>
               </div>
             </div>
