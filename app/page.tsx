@@ -39,20 +39,22 @@ export default function AcopioApp() {
   const [cantidad, setCantidad] = useState("");
   const [inventario, setInventario] = useState<any[]>([]);
   const [busqueda, setBusqueda] = useState("");
+  const [notificacion, setNotificacion] = useState<string | null>(null);
+
+  const mostrarNotificacion = (msg: string) => {
+    setNotificacion(msg);
+    setTimeout(() => setNotificacion(null), 3000);
+  };
 
   useEffect(() => { fetchInventario(); }, []);
 
   const fetchInventario = async () => {
-    const { data, error } = await supabase.from('entradas_acopio').select('*');
-    if (error) alert("Error leyendo DB: " + error.message);
-    else setInventario(data || []);
+    const { data } = await supabase.from('entradas_acopio').select('*');
+    setInventario(data || []);
   };
 
   const guardarInsumo = async () => {
-    if (!producto || !cantidad) {
-      alert("⚠️ Completa los campos antes de registrar");
-      return;
-    }
+    if (!producto || !cantidad) return;
 
     const cantidadNueva = Number(cantidad);
 
@@ -64,32 +66,27 @@ export default function AcopioApp() {
 
     if (existentes && existentes.length > 0) {
       const nuevaCantidad = Number(existentes[0].cantidad) + cantidadNueva;
-      
       const { error } = await supabase
         .from('entradas_acopio')
         .update({ cantidad: nuevaCantidad })
         .eq('id', existentes[0].id);
       
-      if (error) alert("Error al actualizar: " + error.message);
-      else alert(`✅ ${producto} actualizado: ${nuevaCantidad} en total.`);
+      if (!error) mostrarNotificacion(`✓ ${producto}: ${nuevaCantidad} en total.`);
     } else {
       const { error } = await supabase
         .from('entradas_acopio')
         .insert([{ nombre: producto, categoria: categoria, cantidad: cantidadNueva }]);
       
-      if (error) alert("Error al insertar: " + error.message);
-      else alert(`✨ ${producto} agregado al inventario.`);
+      if (!error) mostrarNotificacion(`+ ${producto} agregado.`);
     }
 
     setProducto(""); setCantidad(""); setEsOtro(false); fetchInventario();
   };
 
   const borrarInsumo = async (id: number, nombre: string) => {
-    const confirmacion = window.confirm(`¿Estás seguro de eliminar "${nombre}" del inventario?`);
-    if (confirmacion) {
-      const { error } = await supabase.from('entradas_acopio').delete().eq('id', id);
-      if (error) alert("Error al eliminar: " + error.message);
-      else fetchInventario();
+    if (window.confirm(`¿Eliminar ${nombre}?`)) {
+      await supabase.from('entradas_acopio').delete().eq('id', id);
+      fetchInventario();
     }
   };
 
@@ -104,23 +101,17 @@ export default function AcopioApp() {
     categorias.forEach(cat => {
       doc.setFontSize(14);
       doc.text(cat, 14, startY);
-      
       const filas = inventario.filter(i => i.categoria === cat).map(i => [i.nombre, i.cantidad]);
-      
-      autoTable(doc, {
-        startY: startY + 5,
-        head: [['Producto', 'Cantidad']],
-        body: filas,
-      });
-      
+      autoTable(doc, { startY: startY + 5, head: [['Producto', 'Cantidad']], body: filas });
       startY = (doc as any).lastAutoTable.finalY + 15;
     });
-
     doc.save("inventario.pdf");
   };
 
   return (
     <div className="p-4 max-w-md mx-auto flex flex-col gap-6 bg-black min-h-screen text-white">
+      {notificacion && <div className="fixed top-4 left-4 right-4 bg-blue-600 p-3 rounded-lg text-center font-bold z-50 shadow-xl">{notificacion}</div>}
+      
       <h1 className="text-3xl font-bold text-center text-blue-400">Gestión de Inventario</h1>
       
       <div className="bg-gray-900 p-6 rounded-xl border border-gray-700 flex flex-col gap-4">
@@ -129,23 +120,15 @@ export default function AcopioApp() {
           {Object.keys(catalogo).map(cat => <option key={cat} value={cat}>{cat}</option>)}
         </select>
 
-        <label className="text-sm font-semibold text-gray-300">Producto (escribe para buscar)</label>
+        <label className="text-sm font-semibold text-gray-300">Producto</label>
         {!esOtro ? (
           <>
-            <input 
-              list="productos-list" 
-              className="p-3 bg-gray-800 rounded-lg w-full" 
-              placeholder="Escribe para buscar..." 
-              value={producto}
-              onChange={(e) => {
-                if(e.target.value === "OTRO") setEsOtro(true);
-                else setProducto(e.target.value);
-              }}
-            />
+            <input list="productos-list" className="p-3 bg-gray-800 rounded-lg w-full" placeholder="Buscar..." value={producto} onChange={(e) => {
+              if(e.target.value === "OTRO") setEsOtro(true);
+              else setProducto(e.target.value);
+            }} />
             <datalist id="productos-list">
-              {catalogo[categoria as keyof typeof catalogo].map(p => (
-                <option key={p} value={p} />
-              ))}
+              {catalogo[categoria as keyof typeof catalogo].map(p => <option key={p} value={p} />)}
               <option value="OTRO" />
             </datalist>
           </>
@@ -161,7 +144,7 @@ export default function AcopioApp() {
         <button className="bg-blue-600 p-4 rounded-lg font-bold" onClick={guardarInsumo}>Registrar / Sumar</button>
       </div>
 
-      <input className="p-3 bg-gray-800 rounded-lg w-full" placeholder="🔍 Buscar producto..." onChange={(e) => setBusqueda(e.target.value)} />
+      <input className="p-3 bg-gray-800 rounded-lg w-full" placeholder="🔍 Buscar..." onChange={(e) => setBusqueda(e.target.value)} />
       
       <div className="flex flex-col gap-2">
         {inventario.filter(i => i.nombre.toLowerCase().includes(busqueda.toLowerCase())).map(item => (
@@ -170,15 +153,13 @@ export default function AcopioApp() {
               <p className="font-bold">{item.nombre}</p>
               <p className="text-xs text-blue-400">{item.categoria}</p>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-2xl font-bold">{item.cantidad}</span>
-              <button className="text-red-500 text-xs" onClick={() => borrarInsumo(item.id, item.nombre)}>Borrar</button>
-            </div>
+            <span className="text-2xl font-bold">{item.cantidad}</span>
+            <button className="text-red-500 text-xs" onClick={() => borrarInsumo(item.id, item.nombre)}>Borrar</button>
           </div>
         ))}
       </div>
 
-      <button className="bg-red-700 p-4 rounded-lg font-bold w-full" onClick={descargarPDF}>Descargar PDF Ordenado</button>
+      <button className="bg-red-700 p-4 rounded-lg font-bold w-full" onClick={descargarPDF}>Descargar PDF</button>
     </div>
   );
 }
