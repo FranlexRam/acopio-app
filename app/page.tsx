@@ -1,7 +1,7 @@
 "use client"; // Le dice a Next.js que esto corre en el navegador del celular
 
 import { useState, useEffect } from "react";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5Qrcode } from "html5-qrcode"; // Importación optimizada
 import { supabase } from '../lib/supabaseClient'; // Nuestra conexión a la base de datos
 import jsPDF from "jspdf";// La herramienta para crear el documento PDF
 import autoTable from "jspdf-autotable";          // La herramienta para dibujar la tabla en el PDF
@@ -14,34 +14,35 @@ export default function AcopioApp() {
   const [categoria, setCategoria] = useState("Insumos Médicos"); // Ya viene con esta opción por defecto
   const [cantidad, setCantidad] = useState("");
 
-  // 2. EFECTO: Esto arranca la cámara automáticamente
+  // 2. EFECTO: Escáner profesional
   useEffect(() => {
-    // Configuramos el escáner (cuadrito de 250x250px)
-    const scanner = new Html5QrcodeScanner(
-      "lector-camara", 
-      { fps: 10, qrbox: { width: 250, height: 250 } }, 
-      false
-    );
+    // Si ya tenemos código, no hace falta encender la cámara
+    if (codigoEscaneado) return;
 
-    // ¿Qué pasa si el escáner lee algo con éxito?
-    const alEscanear = (textoDecodificado: string) => {
-      setCodigoEscaneado(textoDecodificado); // Guardamos el código en la memoria
-      scanner.clear(); // Apagamos la cámara para pasar al formulario
-    };
+    const html5QrCode = new Html5Qrcode("lector-camara");
 
-    // ¿Qué pasa si hay error? (ej. está buscando y no encuentra nada aún)
-    const alFallar = (_error: any) => {
-      // Lo ignoramos en silencio mientras busca
-    };
-
-    // Encendemos el escáner
-    scanner.render(alEscanear, alFallar);
+    // Encendemos el escáner con la cámara trasera
+    html5QrCode.start(
+      { facingMode: "environment" }, 
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      (decodedText) => {
+        setCodigoEscaneado(decodedText); // Guardamos el código
+        html5QrCode.stop(); // Detenemos la cámara al detectar el código
+      },
+      (errorMessage) => {
+        // Ignoramos errores de búsqueda continua
+      }
+    ).catch((err) => {
+      console.error("No se pudo iniciar la cámara", err);
+    });
 
     // Regla de limpieza: Si el usuario sale de la página, apagamos la cámara
     return () => {
-      scanner.clear();
+      if (html5QrCode.isScanning) {
+        html5QrCode.stop().catch((err) => console.error("Error al detener", err));
+      }
     };
-  }, []); // Los corchetes vacíos significan "ejecutar solo una vez al abrir"
+  }, [codigoEscaneado]); // Se reinicia solo si limpiamos el código
 
   // 3. FUNCIÓN PARA GUARDAR EN LA BASE DE DATOS
   const guardarInsumo = async () => {
@@ -78,13 +79,13 @@ export default function AcopioApp() {
     }
   };
 
-  // 4. FUNCIÓN PARA GENERAR EL PDF
+  // 4. FUNCIÓN PARA GENERAR EL PDF MEJORADA
   const descargarPDF = async () => {
     // A. Traemos todos los registros de la base de datos
     const { data, error } = await supabase
       .from('entradas_acopio')
       .select('*')
-      .order('fecha_recepcion', { ascending: false });
+      .order('categoria', { ascending: true }); // Ordenamos por categoría desde la base
 
     if (error || !data) {
       alert("Error al obtener los datos para el PDF");
@@ -93,26 +94,38 @@ export default function AcopioApp() {
 
     // B. Creamos el documento PDF
     const doc = new jsPDF();
-    
-    // Título y fecha
-    doc.text("Reporte de Insumos - Centro de Acopio", 14, 15);
+    doc.text("Reporte de Inventario por Categoría", 14, 15);
     doc.setFontSize(10);
     doc.text(`Generado el: ${new Date().toLocaleString()}`, 14, 22);
 
-    // C. Preparamos las columnas y los datos para la tabla
-    const columnas = ["Código", "Nombre", "Categoría", "Cantidad"];
-    const filas = data.map(item => [
-      item.codigo_barras,
-      item.nombre,
-      item.categoria,
-      item.cantidad
-    ]);
+    // C. Agrupamos los datos localmente
+    const agrupado = data.reduce((acc: any, item: any) => {
+      (acc[item.categoria] = acc[item.categoria] || []).push(item);
+      return acc;
+    }, {});
 
-    // D. Dibujamos la tabla
-    autoTable(doc, {
-      startY: 30, // Empieza debajo del título
-      head: [columnas],
-      body: filas,
+    let finalY = 30; // Posición inicial
+
+    // D. Generar una tabla por cada categoría
+    Object.keys(agrupado).forEach((categoria) => {
+      doc.setFontSize(14);
+      doc.text(categoria, 14, finalY);
+      finalY += 5;
+
+      const filas = agrupado[categoria].map((item: any) => [
+        item.nombre,
+        item.cantidad
+      ]);
+
+      autoTable(doc, {
+        startY: finalY,
+        head: [['Producto', 'Cantidad']],
+        body: filas,
+        theme: 'striped',
+      });
+
+      // Actualizamos la posición finalY para que la siguiente tabla no se monte
+      finalY = (doc as any).lastAutoTable.finalY + 10;
     });
 
     // E. Guardar el archivo
@@ -121,31 +134,33 @@ export default function AcopioApp() {
 
   // 3. INTERFAZ: Lo que ve el usuario en la pantalla
   return (
-    <div className="p-4 max-w-md mx-auto flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-center">Acopio Digital</h1>
+    <div className="p-4 max-w-md mx-auto flex flex-col gap-6 bg-black min-h-screen text-white">
+      <h1 className="text-3xl font-bold text-center text-blue-400">Acopio Digital</h1>
       
       {!codigoEscaneado ? (
-        // Si no hay código, mostramos el escáner
-        <div id="lector-camara" className="w-full bg-white rounded-lg overflow-hidden shadow"></div>
+        <div className="w-full flex flex-col items-center gap-4">
+          <div id="lector-camara" className="w-full aspect-square bg-gray-900 rounded-2xl overflow-hidden border-2 border-blue-500 shadow-xl"></div>
+          <p className="text-gray-400 text-sm animate-pulse">Alinea el código de barras en el cuadro...</p>
+        </div>
       ) : (
-        // Si YA tenemos un código, mostramos el formulario
-        <div className="bg-gray-100 p-4 rounded-lg flex flex-col gap-3 shadow">
-          <p className="text-sm bg-green-200 p-2 rounded text-center">
-            Código: <strong>{codigoEscaneado}</strong>
-          </p>
+        <div className="bg-gray-900 p-6 rounded-xl flex flex-col gap-4 shadow-2xl border border-gray-700">
+          <div className="bg-blue-900 border border-blue-400 p-3 rounded-lg text-center">
+            <p className="text-xs text-blue-200 uppercase tracking-widest">Código Escaneado</p>
+            <p className="text-xl font-mono font-bold text-white">{codigoEscaneado}</p>
+          </div>
 
-          <label className="text-sm font-bold">Nombre del Insumo</label>
+          <label className="text-sm font-semibold text-gray-300">Nombre del Insumo</label>
           <input 
             type="text" 
-            className="p-2 border rounded" 
+            className="p-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-blue-400 outline-none" 
             placeholder="Ej. Guantes de Nitrilo"
             value={nombre}
             onChange={(e) => setNombre(e.target.value)} 
           />
 
-          <label className="text-sm font-bold">Categoría</label>
+          <label className="text-sm font-semibold text-gray-300">Categoría</label>
           <select 
-            className="p-2 border rounded bg-white"
+            className="p-3 bg-gray-800 border border-gray-600 rounded-lg text-white focus:border-blue-400 outline-none"
             value={categoria}
             onChange={(e) => setCategoria(e.target.value)}
           >
@@ -156,24 +171,24 @@ export default function AcopioApp() {
             <option>Materiales Generales</option>
           </select>
 
-          <label className="text-sm font-bold">Cantidad Recibida</label>
+          <label className="text-sm font-semibold text-gray-300">Cantidad Recibida</label>
           <input 
             type="number" 
-            className="p-2 border rounded" 
+            className="p-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-blue-400 outline-none" 
             placeholder="Ej. 50"
             value={cantidad}
             onChange={(e) => setCantidad(e.target.value)} 
           />
 
           <button 
-            className="mt-4 bg-blue-600 text-white p-3 rounded font-bold"
+            className="mt-2 bg-blue-600 hover:bg-blue-500 text-white p-4 rounded-lg font-bold text-lg shadow-lg transition-all"
             onClick={guardarInsumo}
           >
             Confirmar y Guardar
           </button>
           
           <button 
-            className="bg-gray-300 text-gray-700 p-2 rounded"
+            className="bg-gray-700 hover:bg-gray-600 text-gray-200 p-3 rounded-lg font-medium transition-all"
             onClick={() => setCodigoEscaneado("")}
           >
             Cancelar escaneo
@@ -181,10 +196,9 @@ export default function AcopioApp() {
         </div>
       )}
 
-      {/* Botón de PDF siempre visible abajo */}
-      <hr className="my-4" />
+      <hr className="border-gray-800" />
       <button 
-        className="bg-red-600 text-white p-3 rounded font-bold w-full"
+        className="bg-red-700 hover:bg-red-600 text-white p-4 rounded-lg font-bold w-full transition-all"
         onClick={descargarPDF}
       >
         Descargar Reporte PDF
