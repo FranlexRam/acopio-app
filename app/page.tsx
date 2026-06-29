@@ -19,7 +19,10 @@ export default function AcopioApp() {
   const [cantidad, setCantidad] = useState("");
   const [inventario, setInventario] = useState<any[]>([]);
   const [catalogoMaestro, setCatalogoMaestro] = useState<any[]>([]);
+  
+  // Estados para filtros
   const [busqueda, setBusqueda] = useState("");
+  const [filtroCategoria, setFiltroCategoria] = useState("Todos");
 
   useEffect(() => { 
     fetchInventario(); 
@@ -82,8 +85,6 @@ export default function AcopioApp() {
 
   const descargarPDF = async () => {
     const doc = new jsPDF();
-    
-    // Convertir imagen a base64 para jsPDF
     const toDataURL = (url: string) => fetch(url).then(response => response.blob()).then(blob => new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
@@ -119,6 +120,13 @@ export default function AcopioApp() {
     doc.save("Reporte_Acopio.pdf");
   };
 
+  // Lógica de filtrado dinámico
+  const inventarioFiltrado = inventario.filter(i => {
+    const coincideBusqueda = i.nombre.toLowerCase().includes(busqueda.toLowerCase());
+    const coincideCategoria = filtroCategoria === "Todos" || i.categoria === filtroCategoria;
+    return coincideBusqueda && coincideCategoria;
+  });
+
   return (
     <div className="min-h-screen w-full bg-black text-white p-4 md:p-8">
       <Toaster />
@@ -128,6 +136,7 @@ export default function AcopioApp() {
       </header>
       
       <main className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Panel de Registro */}
         <div className="bg-gray-900 p-8 rounded-2xl border border-gray-800 flex flex-col gap-4">
           <label className="text-sm font-semibold text-gray-400">Categoría</label>
           <select className="p-4 bg-black rounded-xl border border-gray-700" onChange={(e) => {setCategoria(e.target.value); setProducto("");}}>
@@ -155,12 +164,22 @@ export default function AcopioApp() {
           <input type="number" className="p-4 bg-black rounded-xl border border-gray-700" value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
           
           <button className="bg-blue-600 hover:bg-blue-700 p-4 rounded-xl font-bold transition-all" onClick={guardarInsumo}>Registrar / Sumar</button>
-          <button className="bg-gray-700 hover:bg-gray-600 p-4 rounded-xl font-bold transition-all" onClick={descargarPDF}>Descargar Reporte PDF</button>
+          
+          {/* Botón Rojo Premium */}
+          <button className="bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 hover:to-red-800 p-4 rounded-xl font-bold transition-all shadow-lg border border-red-500" onClick={descargarPDF}>Descargar Reporte PDF</button>
         </div>
 
+        {/* Panel de Inventario con Filtros */}
         <div className="flex flex-col gap-4">
-          <input className="p-4 bg-gray-900 rounded-xl border border-gray-700 w-full" placeholder="🔍 Buscar en inventario..." onChange={(e) => setBusqueda(e.target.value)} />
-          {inventario.filter(i => i.nombre.toLowerCase().includes(busqueda.toLowerCase())).map(item => (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input className="p-4 bg-gray-900 rounded-xl border border-gray-700 w-full" placeholder="🔍 Buscar nombre..." onChange={(e) => setBusqueda(e.target.value)} />
+            <select className="p-4 bg-gray-900 rounded-xl border border-gray-700" onChange={(e) => setFiltroCategoria(e.target.value)}>
+              <option value="Todos">Todas las categorías</option>
+              {categoriasBase.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
+          </div>
+          
+          {inventarioFiltrado.map(item => (
             <div key={item.id} className="flex justify-between items-center bg-gray-900 p-5 rounded-xl border border-gray-800">
               <div>
                 <p className="font-bold text-lg">{item.nombre}</p>
