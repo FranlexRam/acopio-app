@@ -21,60 +21,61 @@ export default function AcopioApp() {
   const [inventario, setInventario] = useState<any[]>([]);
   const [busqueda, setBusqueda] = useState("");
 
-  useEffect(() => {
-    fetchInventario();
-    
-    // SUSCRIPCIÓN EN TIEMPO REAL: Se actualiza al insertar, actualizar o borrar
-    const canal = supabase.channel('realtime:entradas_acopio')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'entradas_acopio' }, () => {
-        fetchInventario();
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(canal); };
-  }, []);
+  useEffect(() => { fetchInventario(); }, []);
 
   const fetchInventario = async () => {
-    const { data } = await supabase.from('entradas_acopio').select('*').order('categoria');
-    if (data) setInventario(data);
+    const { data, error } = await supabase.from('entradas_acopio').select('*');
+    if (error) alert("Error leyendo DB: " + error.message);
+    else setInventario(data || []);
   };
 
   const guardarInsumo = async () => {
-    if (!producto || !cantidad) return;
-    const cant = parseInt(cantidad);
+    if (!producto || !cantidad) {
+      alert("Completa los campos");
+      return;
+    }
 
-    const { data: existente } = await supabase
+    const cantNum = parseInt(cantidad);
+
+    // Buscamos si ya existe ese producto en esa categoría
+    const { data: existentes } = await supabase
       .from('entradas_acopio')
       .select('id, cantidad')
       .eq('nombre', producto)
-      .eq('categoria', categoria)
-      .single();
+      .eq('categoria', categoria);
 
-    if (existente) {
-      await supabase.from('entradas_acopio').update({ cantidad: existente.cantidad + cant }).eq('id', existente.id);
+    if (existentes && existentes.length > 0) {
+      // Si existe, actualizamos
+      const { error } = await supabase
+        .from('entradas_acopio')
+        .update({ cantidad: existentes[0].cantidad + cantNum })
+        .eq('id', existentes[0].id);
+      
+      if (error) alert("Error al sumar: " + error.message);
     } else {
-      await supabase.from('entradas_acopio').insert([{ nombre: producto, categoria, cantidad: cant }]);
+      // Si no existe, insertamos (Sin codigo_barras)
+      const { error } = await supabase
+        .from('entradas_acopio')
+        .insert([{ nombre: producto, categoria: categoria, cantidad: cantNum }]);
+      
+      if (error) alert("Error al insertar: " + error.message);
     }
-    setProducto(""); setCantidad(""); setEsOtro(false);
+
+    setProducto(""); setCantidad(""); fetchInventario();
   };
 
-  const borrarInsumo = async (id: string) => {
+  const borrarInsumo = async (id: number) => {
     await supabase.from('entradas_acopio').delete().eq('id', id);
+    fetchInventario();
   };
 
   const descargarPDF = () => {
     const doc = new jsPDF();
-    doc.text("Reporte de Inventario Actualizado", 14, 15);
-    // Usamos 'inventario' (el estado actual) para generar el PDF
+    doc.text("Reporte de Inventario", 14, 15);
     const filas = inventario.map(i => [i.categoria, i.nombre, i.cantidad]);
     autoTable(doc, { head: [['Categoría', 'Producto', 'Cantidad']], body: filas });
     doc.save("inventario.pdf");
   };
-
-  const inventarioFiltrado = inventario.filter(i => 
-    i.nombre.toLowerCase().includes(busqueda.toLowerCase()) || 
-    i.categoria.toLowerCase().includes(busqueda.toLowerCase())
-  );
 
   return (
     <div className="p-4 max-w-md mx-auto flex flex-col gap-6 bg-black min-h-screen text-white">
@@ -94,28 +95,28 @@ export default function AcopioApp() {
           }}>
             <option value="">Selecciona...</option>
             {catalogo[categoria as keyof typeof catalogo].map(p => <option key={p} value={p}>{p}</option>)}
-            <option value="OTRO" className="text-blue-400 font-bold">+ Agregar otro producto</option>
+            <option value="OTRO" className="text-blue-400 font-bold">+ Agregar otro</option>
           </select>
         ) : (
           <div className="flex gap-2">
-            <input className="p-3 bg-gray-800 rounded-lg flex-1" placeholder="Nuevo producto" onChange={(e) => setProducto(e.target.value)} />
+            <input className="p-3 bg-gray-800 rounded-lg flex-1" placeholder="Nuevo nombre" onChange={(e) => setProducto(e.target.value)} />
             <button className="bg-gray-700 p-2 rounded" onClick={() => setEsOtro(false)}>X</button>
           </div>
         )}
 
         <label className="text-sm font-semibold text-gray-300">Cantidad</label>
         <input type="number" className="p-3 bg-gray-800 rounded-lg" value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
-        <button className="bg-blue-600 p-4 rounded-lg font-bold" onClick={guardarInsumo}>Registrar / Sumar</button>
+        <button className="bg-blue-600 p-4 rounded-lg font-bold" onClick={guardarInsumo}>Registrar Producto</button>
       </div>
 
-      <input className="p-3 bg-gray-800 rounded-lg w-full" placeholder="🔍 Buscar en inventario..." onChange={(e) => setBusqueda(e.target.value)} />
+      <input className="p-3 bg-gray-800 rounded-lg w-full" placeholder="🔍 Buscar..." onChange={(e) => setBusqueda(e.target.value)} />
       
       <div className="flex flex-col gap-2">
-        {inventarioFiltrado.map(item => (
+        {inventario.filter(i => i.nombre.toLowerCase().includes(busqueda.toLowerCase())).map(item => (
           <div key={item.id} className="flex justify-between items-center bg-gray-800 p-4 rounded-lg">
             <div>
               <p className="font-bold">{item.nombre}</p>
-              <p className="text-xs text-blue-400 uppercase">{item.categoria}</p>
+              <p className="text-xs text-blue-400">{item.categoria}</p>
             </div>
             <div className="flex items-center gap-4">
               <span className="text-2xl font-bold">{item.cantidad}</span>
