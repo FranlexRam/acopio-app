@@ -6,7 +6,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const LOGO_URL = "https://i.postimg.cc/J4TfQCsG/Trigalena-Runners.png";
+const LOGO_URL = "https://i.postimg.cc/VvJ6LBTr/LOGO-TRIGALENZ-A-RUNNERS-1.png";
 const categoriasBase = [
   "Insumos Médicos", "Equipos de Protección (EPP)", 
   "Higiene Personal", "Alimentos y Nutrición", "Rescate y Contingencia"
@@ -141,7 +141,7 @@ export default function AcopioApp() {
     <div className="min-h-screen w-full bg-black text-white p-4 md:p-8">
       <Toaster />
       <header className="max-w-5xl mx-auto mb-10 text-center flex flex-col items-center gap-4">
-        <img src={LOGO_URL} alt="Logo Sakti" className="h-24 w-auto object-contain" />
+        <img src={LOGO_URL} alt="Logo Sakti" className="h-60 w-auto object-contain" />
         <h1 className="text-4xl font-light tracking-tight text-blue-400">Insumos - Centro de Acopio</h1>
       </header>
       
