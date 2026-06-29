@@ -6,7 +6,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const LOGO_URL = "https://i.postimg.cc/6ptN3QJ5/logo-sakti.png";
+const LOGO_URL = "https://postimg.cc/RJz9gfv4";
 const categoriasBase = [
   "Insumos Médicos", "Equipos de Protección (EPP)", 
   "Higiene Personal", "Alimentos y Nutrición", "Rescate y Contingencia"
