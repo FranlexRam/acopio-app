@@ -2,17 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from '../lib/supabaseClient';
-import toast, { Toaster } from 'react-hot-toast'; // Importamos librería pro
+import toast, { Toaster } from 'react-hot-toast';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const catalogo = {
-  "Insumos Médicos": ["Gasas", "Algodón", "Alcohol Isopropílico", "Jeringas", "Vendas elásticas", "Agua oxigenada", "Guantes de látex", "Termómetros", "Ibuprofeno (Niños/Adultos)", "Acetaminofén (Gotas/Tabletas)", "Amoxicilina", "Suero Oral", "Sales de rehidratación", "Kit de sutura", "Analgésicos fuertes", "Ungüento antibiótico", "Crema para quemaduras", "Jarabe para la tos (Niños)", "Suplemento vitamínico", "Férulas", "Torniquetes", "Colirio ocular", "Pastillas para purificar agua"],
-  "Equipos de Protección (EPP)": ["Tapabocas N95", "Caretas faciales", "Gafas de seguridad", "Botas de goma", "Delantales desechables", "Gorros quirúrgicos", "Cascos de protección", "Chalecos reflectantes", "Guantes de trabajo pesado", "Cinturones de herramientas", "Silbatos de emergencia"],
-  "Higiene Personal": ["Jabón de barra", "Champú", "Desodorante", "Pasta dental", "Cepillos de dientes", "Toallas sanitarias", "Papel higiénico", "Toallitas húmedas", "Pañales (Etapa 1-6)", "Crema anti-pañalitis", "Talco", "Desinfectante de manos", "Peines", "Cortaúñas", "Toallas de baño", "Ropa interior desechable"],
-  "Alimentos y Nutrición": ["Agua (250mL)", "Agua (500mL)", "Agua (1.5L)", "Agua (5L)", "Agua (Garrafón)", "Arroz blanco", "Harina de maíz", "Granos (Caraotas/Lentejas)", "Aceite vegetal", "Leche en polvo", "Azúcar", "Atún en lata", "Pasta corta", "Sardinas en lata", "Galletas de soda", "Barritas energéticas", "Compotas (Niños)", "Cereal infantil", "Mantequilla de maní", "Chocolate oscuro", "Café/Té"],
-  "Rescate y Contingencia": ["Linternas", "Pilas (AA/AAA/D)", "Cintas adhesivas (Duct tape)", "Bolsas negras (Grandes)", "Marcadores permanentes", "Papel bond", "Sillas plásticas", "Mantas térmicas", "Carpas/Tiendas de campaña", "Colchonetas", "Cuerda de rescate (50m)", "Radio a baterías", "Encendedores/Fósforos", "Herramientas multiuso (Navaja)", "Radio AM/FM", "Ponchos para lluvia", "Señalización luminosa"]
-};
+const categoriasBase = [
+  "Insumos Médicos", "Equipos de Protección (EPP)", 
+  "Higiene Personal", "Alimentos y Nutrición", "Rescate y Contingencia"
+];
 
 export default function AcopioApp() {
   const [categoria, setCategoria] = useState("Insumos Médicos");
@@ -20,13 +17,22 @@ export default function AcopioApp() {
   const [esOtro, setEsOtro] = useState(false);
   const [cantidad, setCantidad] = useState("");
   const [inventario, setInventario] = useState<any[]>([]);
+  const [catalogoMaestro, setCatalogoMaestro] = useState<any[]>([]);
   const [busqueda, setBusqueda] = useState("");
 
-  useEffect(() => { fetchInventario(); }, []);
+  useEffect(() => { 
+    fetchInventario(); 
+    fetchCatalogo(); 
+  }, []);
 
   const fetchInventario = async () => {
     const { data } = await supabase.from('entradas_acopio').select('*');
     setInventario(data || []);
+  };
+
+  const fetchCatalogo = async () => {
+    const { data } = await supabase.from('catalogo_maestro').select('*');
+    setCatalogoMaestro(data || []);
   };
 
   const guardarInsumo = async () => {
@@ -36,6 +42,8 @@ export default function AcopioApp() {
     }
 
     const cantidadInput = parseInt(cantidad);
+    
+    // 1. Guardar/Sumar en Inventario
     const { data: existentes } = await supabase
       .from('entradas_acopio')
       .select('id, cantidad')
@@ -44,21 +52,19 @@ export default function AcopioApp() {
 
     if (existentes && existentes.length > 0) {
       const nuevaCantidad = Number(existentes[0].cantidad) + cantidadInput;
-      const { error } = await supabase
-        .from('entradas_acopio')
-        .update({ cantidad: nuevaCantidad })
-        .eq('id', existentes[0].id);
-      
-      if (error) toast.error("Error al actualizar: " + error.message);
-      else toast.success(`Actualizado: ${nuevaCantidad} unidades`);
+      await supabase.from('entradas_acopio').update({ cantidad: nuevaCantidad }).eq('id', existentes[0].id);
+      toast.success(`Actualizado: ${nuevaCantidad} unidades`);
     } else {
-      const { error } = await supabase
-        .from('entradas_acopio')
-        .insert([{ nombre: producto, categoria, cantidad: cantidadInput }]);
+      await supabase.from('entradas_acopio').insert([{ nombre: producto, categoria, cantidad: cantidadInput }]);
       
-      if (error) toast.error("Error al guardar");
-      else toast.success("Producto registrado");
+      // 2. Si es producto nuevo, guardarlo en el catálogo maestro si no existe
+      if (!catalogoMaestro.find(p => p.nombre === producto)) {
+        await supabase.from('catalogo_maestro').insert([{ nombre: producto, categoria }]);
+        fetchCatalogo();
+      }
+      toast.success("Producto registrado");
     }
+    
     setProducto(""); setCantidad(""); setEsOtro(false); fetchInventario();
   };
 
@@ -97,12 +103,10 @@ export default function AcopioApp() {
       <Toaster />
       <h1 className="text-3xl font-bold text-center text-blue-400 mb-6">SAKTI INVENTORY</h1>
       
-      {/* ... (Tu formulario y lista se mantienen igual, usando las funciones actualizadas) ... */}
-      
       <div className="bg-gray-900 p-6 rounded-xl border border-gray-700 flex flex-col gap-4">
         <label className="text-sm font-semibold text-gray-300">Categoría</label>
         <select className="p-3 bg-gray-800 rounded-lg" onChange={(e) => {setCategoria(e.target.value); setProducto("");}}>
-          {Object.keys(catalogo).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+          {categoriasBase.map(cat => <option key={cat} value={cat}>{cat}</option>)}
         </select>
 
         <label className="text-sm font-semibold text-gray-300">Producto</label>
@@ -113,7 +117,7 @@ export default function AcopioApp() {
               else setProducto(e.target.value);
             }} />
             <datalist id="productos-list">
-              {catalogo[categoria as keyof typeof catalogo].map(p => <option key={p} value={p} />)}
+              {catalogoMaestro.filter(p => p.categoria === categoria).map(p => <option key={p.nombre} value={p.nombre} />)}
               <option value="OTRO" />
             </datalist>
           </>
