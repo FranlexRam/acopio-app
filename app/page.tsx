@@ -6,11 +6,30 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 const catalogo = {
-  "Insumos Médicos": ["Gasas", "Algodón", "Alcohol Isopropílico", "Jeringas", "Vendas elásticas", "Agua oxigenada", "Guantes de látex", "Termómetros", "Ibuprofeno (Niños/Adultos)", "Acetaminofén (Gotas/Tabletas)", "Amoxicilina", "Suero Oral", "Sales de rehidratación"],
-  "Equipos de Protección (EPP)": ["Tapabocas N95", "Caretas faciales", "Gafas de seguridad", "Botas de goma", "Delantales desechables", "Gorros quirúrgicos"],
-  "Higiene Personal": ["Jabón de barra", "Champú", "Desodorante", "Pasta dental", "Cepillos de dientes", "Toallas sanitarias", "Papel higiénico", "Toallitas húmedas"],
-  "Alimentos y Nutrición": ["Arroz blanco", "Harina de maíz", "Granos", "Aceite vegetal", "Leche en polvo", "Azúcar", "Atún en lata", "Pasta corta"],
-  "Materiales Generales": ["Linternas", "Pilas", "Cintas adhesivas", "Bolsas negras", "Marcadores permanentes", "Papel bond", "Sillas plásticas"]
+  "Insumos Médicos": [
+    "Gasas", "Algodón", "Alcohol Isopropílico", "Jeringas", "Vendas elásticas", "Agua oxigenada", "Guantes de látex", "Termómetros",
+    "Ibuprofeno (Niños/Adultos)", "Acetaminofén (Gotas/Tabletas)", "Amoxicilina", "Suero Oral", "Sales de rehidratación",
+    "Kit de sutura", "Analgésicos fuertes", "Ungüento antibiótico", "Crema para quemaduras", "Jarabe para la tos (Niños)", "Suplemento vitamínico",
+    "Férulas", "Torniquetes", "Colirio ocular", "Pastillas para purificar agua"
+  ],
+  "Equipos de Protección (EPP)": [
+    "Tapabocas N95", "Caretas faciales", "Gafas de seguridad", "Botas de goma", "Delantales desechables", "Gorros quirúrgicos",
+    "Cascos de protección", "Chalecos reflectantes", "Guantes de trabajo pesado", "Cinturones de herramientas", "Silbatos de emergencia"
+  ],
+  "Higiene Personal": [
+    "Jabón de barra", "Champú", "Desodorante", "Pasta dental", "Cepillos de dientes", "Toallas sanitarias", "Papel higiénico", "Toallitas húmedas",
+    "Pañales (Etapa 1-6)", "Crema anti-pañalitis", "Talco", "Desinfectante de manos", "Peines", "Cortaúñas", "Toallas de baño", "Ropa interior desechable"
+  ],
+  "Alimentos y Nutrición": [
+    "Agua (250mL)", "Agua (500mL)", "Agua (1.5L)", "Agua (5L)", "Agua (Garrafón)",
+    "Arroz blanco", "Harina de maíz", "Granos (Caraotas/Lentejas)", "Aceite vegetal", "Leche en polvo", "Azúcar", "Atún en lata", "Pasta corta",
+    "Sardinas en lata", "Galletas de soda", "Barritas energéticas", "Compotas (Niños)", "Cereal infantil", "Mantequilla de maní", "Chocolate oscuro", "Café/Té"
+  ],
+  "Rescate y Contingencia": [
+    "Linternas", "Pilas (AA/AAA/D)", "Cintas adhesivas (Duct tape)", "Bolsas negras (Grandes)", "Marcadores permanentes", "Papel bond", "Sillas plásticas",
+    "Mantas térmicas", "Carpas/Tiendas de campaña", "Colchonetas", "Cuerda de rescate (50m)", "Radio a baterías", "Encendedores/Fósforos", "Herramientas multiuso (Navaja)",
+    "Radio AM/FM", "Ponchos para lluvia", "Señalización luminosa"
+  ]
 };
 
 export default function AcopioApp() {
@@ -31,7 +50,7 @@ export default function AcopioApp() {
 
   const guardarInsumo = async () => {
     if (!producto || !cantidad) {
-      alert("Completa los campos");
+      alert("⚠️ Completa los campos antes de registrar");
       return;
     }
 
@@ -44,26 +63,34 @@ export default function AcopioApp() {
       .eq('categoria', categoria);
 
     if (existentes && existentes.length > 0) {
+      const nuevaCantidad = Number(existentes[0].cantidad) + cantidadNueva;
+      
       const { error } = await supabase
         .from('entradas_acopio')
-        .update({ cantidad: Number(existentes[0].cantidad) + cantidadNueva })
+        .update({ cantidad: nuevaCantidad })
         .eq('id', existentes[0].id);
       
-      if (error) alert("Error al sumar: " + error.message);
+      if (error) alert("Error al actualizar: " + error.message);
+      else alert(`✅ ${producto} actualizado: ${nuevaCantidad} en total.`);
     } else {
       const { error } = await supabase
         .from('entradas_acopio')
         .insert([{ nombre: producto, categoria: categoria, cantidad: cantidadNueva }]);
       
       if (error) alert("Error al insertar: " + error.message);
+      else alert(`✨ ${producto} agregado al inventario.`);
     }
 
     setProducto(""); setCantidad(""); setEsOtro(false); fetchInventario();
   };
 
-  const borrarInsumo = async (id: number) => {
-    await supabase.from('entradas_acopio').delete().eq('id', id);
-    fetchInventario();
+  const borrarInsumo = async (id: number, nombre: string) => {
+    const confirmacion = window.confirm(`¿Estás seguro de eliminar "${nombre}" del inventario?`);
+    if (confirmacion) {
+      const { error } = await supabase.from('entradas_acopio').delete().eq('id', id);
+      if (error) alert("Error al eliminar: " + error.message);
+      else fetchInventario();
+    }
   };
 
   const descargarPDF = () => {
@@ -145,7 +172,7 @@ export default function AcopioApp() {
             </div>
             <div className="flex items-center gap-4">
               <span className="text-2xl font-bold">{item.cantidad}</span>
-              <button className="text-red-500 text-xs" onClick={() => borrarInsumo(item.id)}>Borrar</button>
+              <button className="text-red-500 text-xs" onClick={() => borrarInsumo(item.id, item.nombre)}>Borrar</button>
             </div>
           </div>
         ))}
