@@ -20,11 +20,9 @@ export default function AcopioApp() {
   const [inventario, setInventario] = useState<any[]>([]);
   const [catalogoMaestro, setCatalogoMaestro] = useState<any[]>([]);
   
-  // Estados para filtros
   const [busqueda, setBusqueda] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState("Todos");
   
-  // Estados para edición
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [nuevaCant, setNuevaCant] = useState("");
 
@@ -34,7 +32,8 @@ export default function AcopioApp() {
   }, []);
 
   const fetchInventario = async () => {
-    const { data } = await supabase.from('entradas_acopio').select('*');
+    // Ordenamos desde la base de datos por ID descendente para mantener consistencia
+    const { data } = await supabase.from('entradas_acopio').select('*').order('id', { ascending: false });
     setInventario(data || []);
   };
 
@@ -139,7 +138,9 @@ export default function AcopioApp() {
 
   return (
     <div className="min-h-screen w-full bg-black text-white p-4 md:p-8">
-      <Toaster />
+      {/* Configuración del Toaster en top-right */}
+      <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
+      
       <header className="max-w-5xl mx-auto mb-10 text-center flex flex-col items-center gap-4">
         <img src={LOGO_URL} alt="Logo Sakti" className="h-60 w-auto object-contain" />
         <h1 className="text-4xl font-light tracking-tight text-blue-400">Insumos - Centro de Acopio</h1>
