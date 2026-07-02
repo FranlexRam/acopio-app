@@ -85,6 +85,8 @@ export default function AcopioApp() {
           <button className="bg-red-500 text-white px-3 py-1 rounded" onClick={async () => {
             await supabase.from('entradas_acopio').delete().eq('id', id);
             toast.dismiss(t.id);
+            // Notificación de éxito al eliminar
+            toast.success(`Producto eliminado correctamente`);
             fetchInventario();
           }}>Confirmar</button>
           <button onClick={() => toast.dismiss(t.id)}>Cancelar</button>
