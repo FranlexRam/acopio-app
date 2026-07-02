@@ -26,13 +26,15 @@ export default function AcopioApp() {
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [nuevaCant, setNuevaCant] = useState("");
 
+  // Cálculo del total en tiempo real
+  const totalProductos = inventario.reduce((sum, item) => sum + Number(item.cantidad), 0);
+
   useEffect(() => { 
     fetchInventario(); 
     fetchCatalogo(); 
   }, []);
 
   const fetchInventario = async () => {
-    // Ordenamos desde la base de datos por ID descendente para mantener consistencia
     const { data } = await supabase.from('entradas_acopio').select('*').order('id', { ascending: false });
     setInventario(data || []);
   };
@@ -85,8 +87,14 @@ export default function AcopioApp() {
           <button className="bg-red-500 text-white px-3 py-1 rounded" onClick={async () => {
             await supabase.from('entradas_acopio').delete().eq('id', id);
             toast.dismiss(t.id);
-            // Notificación de éxito al eliminar
-            toast.success(`Producto eliminado correctamente`);
+            toast.success("Producto eliminado correctamente", {
+              icon: '🗑️',
+              style: {
+                background: '#000',
+                color: '#ef4444',
+                border: '1px solid #ef4444',
+              },
+            });
             fetchInventario();
           }}>Confirmar</button>
           <button onClick={() => toast.dismiss(t.id)}>Cancelar</button>
@@ -140,12 +148,17 @@ export default function AcopioApp() {
 
   return (
     <div className="min-h-screen w-full bg-black text-white p-4 md:p-8">
-      {/* Configuración del Toaster en top-right */}
       <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
       
       <header className="max-w-5xl mx-auto mb-10 text-center flex flex-col items-center gap-4">
         <img src={LOGO_URL} alt="Logo Sakti" className="h-60 w-auto object-contain" />
         <h1 className="text-4xl font-light tracking-tight text-blue-400">Insumos - Centro de Acopio</h1>
+        
+        {/* Contador de productos total */}
+        <div className="bg-gray-900 border border-gray-800 px-8 py-4 rounded-2xl mt-4">
+          <p className="text-gray-400 text-sm uppercase tracking-widest">Total recolectado</p>
+          <p className="text-5xl font-bold text-white mt-1">{totalProductos}</p>
+        </div>
       </header>
       
       <main className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
