@@ -156,7 +156,7 @@ export default function AcopioApp() {
         
         {/* Contador de productos total */}
         <div className="bg-gray-900 border border-gray-800 px-8 py-4 rounded-2xl mt-4">
-          <p className="text-gray-400 text-sm uppercase tracking-widest">Total recolectado</p>
+          <p className="text-gray-400 text-sm uppercase tracking-widest">Total de insumos recolectados</p>
           <p className="text-5xl font-bold text-white mt-1">{totalProductos}</p>
         </div>
       </header>
