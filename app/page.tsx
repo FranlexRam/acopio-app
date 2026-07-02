@@ -26,7 +26,6 @@ export default function AcopioApp() {
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [nuevaCant, setNuevaCant] = useState("");
 
-  // Cálculo del total en tiempo real
   const totalProductos = inventario.reduce((sum, item) => sum + Number(item.cantidad), 0);
 
   useEffect(() => { 
@@ -44,9 +43,28 @@ export default function AcopioApp() {
     setCatalogoMaestro(data || []);
   };
 
+  // Función para sugerir productos parecidos
+  const sugerirProducto = (input: string) => {
+    const todosEnCat = catalogoMaestro.filter(p => p.categoria === categoria);
+    return todosEnCat.find(p => p.nombre.toLowerCase().includes(input.toLowerCase()) || input.toLowerCase().includes(p.nombre.toLowerCase()));
+  };
+
   const guardarInsumo = async () => {
     if (!producto || !cantidad) {
       toast.error("Completa todos los campos");
+      return;
+    }
+
+    // 1. Validar si existe en catálogo
+    const existeEnCatalogo = catalogoMaestro.some(p => p.nombre.toLowerCase() === producto.toLowerCase() && p.categoria === categoria);
+
+    if (!existeEnCatalogo && !esOtro) {
+      const sugerencia = sugerirProducto(producto);
+      if (sugerencia) {
+        toast.error(`Producto no encontrado. ¿Quizás quisiste decir "${sugerencia.nombre}"?`);
+      } else {
+        toast.error("Producto desconocido. Por favor, selecciona 'OTRO' para agregarlo al catálogo.");
+      }
       return;
     }
 
@@ -63,14 +81,15 @@ export default function AcopioApp() {
       toast.success(`Actualizado: ${nuevaCantidad} unidades`);
     } else {
       await supabase.from('entradas_acopio').insert([{ nombre: producto, categoria, cantidad: cantidadInput }]);
-      if (!catalogoMaestro.find(p => p.nombre === producto)) {
-        await supabase.from('catalogo_maestro').insert([{ nombre: producto, categoria }]);
-        fetchCatalogo();
-      }
-      toast.success("Producto registrado");
+      // Si es un producto nuevo, lo agregamos al catálogo maestro
+      await supabase.from('catalogo_maestro').insert([{ nombre: producto, categoria }]);
+      fetchCatalogo();
+      toast.success("Producto registrado en catálogo e inventario");
     }
     setProducto(""); setCantidad(""); setEsOtro(false); fetchInventario();
   };
+
+  // ... (resto de tus funciones: actualizarCantidad, borrarInsumo, descargarPDF)
 
   const actualizarCantidad = async (id: number) => {
     await supabase.from('entradas_acopio').update({ cantidad: parseInt(nuevaCant) }).eq('id', id);
@@ -89,11 +108,7 @@ export default function AcopioApp() {
             toast.dismiss(t.id);
             toast.success("Producto eliminado correctamente", {
               icon: '🗑️',
-              style: {
-                background: '#000',
-                color: '#ef4444',
-                border: '1px solid #ef4444',
-              },
+              style: { background: '#000', color: '#ef4444', border: '1px solid #ef4444' },
             });
             fetchInventario();
           }}>Confirmar</button>
@@ -147,6 +162,7 @@ export default function AcopioApp() {
   });
 
   return (
+    // ... (Tu JSX permanece igual, la validación lógica ya está integrada arriba)
     <div className="min-h-screen w-full bg-black text-white p-4 md:p-8">
       <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
       
@@ -154,7 +170,6 @@ export default function AcopioApp() {
         <img src={LOGO_URL} alt="Logo Sakti" className="h-60 w-auto object-contain" />
         <h1 className="text-4xl font-light tracking-tight text-blue-400">Insumos - Centro de Acopio</h1>
         
-        {/* Contador de productos total */}
         <div className="bg-gray-900 border border-gray-800 px-8 py-4 rounded-2xl mt-4">
           <p className="text-gray-400 text-sm uppercase tracking-widest">Total de insumos recolectados</p>
           <p className="text-5xl font-bold text-white mt-1">{totalProductos}</p>
